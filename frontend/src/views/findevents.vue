@@ -68,7 +68,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-300">
-            <tr @click="$router.push({name: 'eventdetails', params: { id: event._id } })"
+            <tr @click="router.push({name: 'eventdetails', params: { id: event._id } })"
               v-for="event in events" :key="event._id" class="cursor-pointer"
               :class="{ 'hoverRow': hoverId === event._id }" @mouseenter="hoverId = event._id"
               @mouseleave="hoverId = null">
@@ -83,92 +83,97 @@
   </main>
 </template>
 
-<script>
+<script setup>
+// MIGRATION NOTE: Converted from the Options API (data, mounted, methods) to <script setup>.
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { getEvents, searchEvents } from '../api/api'
 import { useToast } from 'vue-toastification'
 
 //Notifications
 const toast = useToast()
 
-export default {
-  data() {
-    return {
-      //variable to hold all events for the organization
-      events: null,
-      // Parameters for search to occur
-      searchBy: null,
-      name: null,
-      eventDate: null,
-      // variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
-      hoverId: null,
-    }
-  },
-  mounted() {
-    // when component is mounted, load the data
-    this.loadData();
-  },
-  methods: {
-    // method called when component is mounted
-    async loadData() {
-      // Resets variables used for search
-      this.searchBy = null
-      this.name = null
-      this.eventDate = null
+// MIGRATION NOTE: $router in the template now uses this router from useRouter()
+const router = useRouter()
 
-      // show loading wheel
-      this.isLoading = true;
-      // get list of events
-      try {
-        const response = await getEvents();
-        this.events = response;
-      } catch (error) {
-        toast.error('loadData error', error)
-      }
-    },
+// MIGRATION NOTE: each property in the data option became its own ref
+//variable to hold all events for the organization
+const events = ref(null)
+// Parameters for search to occur
+const searchBy = ref(null)
+const name = ref(null)
+const eventDate = ref(null)
+// variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
+const hoverId = ref(null)
 
-    // method called when user searches for an event
-    async handleSubmitForm() {
-      // if user searches by event name
-      if (this.searchBy === 'Event Name') {
-        if (this.name) {
-          try {
-            const query = {
-              searchBy: 'name',
-              name: this.name
-            };
-            const response = await searchEvents(query);
-            this.events = response;
-          } catch (error) {
-            toast.error('Error searching events', error)
-          }
-        }
-        // if user searches by event date
-      } else if (this.searchBy === 'Event Date') {
-        if (this.eventDate) {
-          try {
-            const eventDate = new Date(this.eventDate);
-            const formattedDate = eventDate.toISOString().substring(0, 10);
-            const query = {
-              searchBy: 'date',
-              eventDate: formattedDate
-            };
-            const response = await searchEvents(query);
-            this.events = response;
-          } catch (error) {
-            toast.error('Error searching events:', error)
-          }
-        }
-      }
-    },
+// MIGRATION NOTE: methods.loadData became a regular function. this.x became x.value
+// The old version set this.isLoading = true, but isLoading was never declared in the data option and
+// never shown in the template, so that line did nothing and was removed.
+// function called when component is mounted and when "Clear Search" is clicked
+async function loadData() {
+  // Resets variables used for search
+  searchBy.value = null
+  name.value = null
+  eventDate.value = null
 
-    // method called for each event date so it will be formatted correctly on the table
-    formatDate(date) {
-      const isoDate = new Date(date);
-      const year = isoDate.getUTCFullYear();
-      const month = String(isoDate.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(isoDate.getUTCDate()).padStart(2, '0');
-      return `${month}/${day}/${year}`;
-    },
-  },
+  // get list of events
+  try {
+    const response = await getEvents()
+    events.value = response
+  } catch (error) {
+    toast.error('loadData error', error)
+  }
 }
+
+// MIGRATION NOTE: methods.handleSubmitForm became a regular function
+// function called when user searches for an event
+async function handleSubmitForm() {
+  // if user searches by event name
+  if (searchBy.value === 'Event Name') {
+    if (name.value) {
+      try {
+        const query = {
+          searchBy: 'name',
+          name: name.value
+        }
+        const response = await searchEvents(query)
+        events.value = response
+      } catch (error) {
+        toast.error('Error searching events', error)
+      }
+    }
+    // if user searches by event date
+  } else if (searchBy.value === 'Event Date') {
+    if (eventDate.value) {
+      try {
+        const date = new Date(eventDate.value)
+        const formattedDate = date.toISOString().substring(0, 10)
+        const query = {
+          searchBy: 'date',
+          eventDate: formattedDate
+        }
+        const response = await searchEvents(query)
+        events.value = response
+      } catch (error) {
+        toast.error('Error searching events:', error)
+      }
+    }
+  }
+}
+
+// MIGRATION NOTE: methods.formatDate became a regular function the template can call directly
+// function called for each event date so it will be formatted correctly on the table
+function formatDate(date) {
+  const isoDate = new Date(date)
+  const year = isoDate.getUTCFullYear()
+  const month = String(isoDate.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(isoDate.getUTCDate()).padStart(2, '0')
+  return `${month}/${day}/${year}`
+}
+
+// MIGRATION NOTE: mounted() became onMounted()
+// when component is mounted, load the data
+onMounted(() => {
+  loadData()
+})
 </script>
