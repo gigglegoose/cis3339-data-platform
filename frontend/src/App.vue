@@ -5,7 +5,7 @@
     <div id="_container" class="min-h-screen">
       <header class="w-full">
         <section class="text-center">
-          <img class="m-auto" src="@\assets\DanPersona.svg" />
+          <img class="m-auto" src="@/assets/DanPersona.svg" alt="Data Platform logo" />
         </section>
         <!--Navigation bar-->
         <nav class="mt-10">
@@ -89,7 +89,11 @@
   </main>
 </template>
 
-<script>
+<script setup>
+// MIGRATION NOTE: Converted from the Options API (setup, data, created, and methods options)
+// to the Composition API using <script setup>. Everything declared at the top level of
+// <script setup> is automatically available in the template, so there's no return object.
+import { ref, onMounted } from 'vue'
 import { useLoggedInUserStore } from './store/loggedInUser'
 import { getOrgName } from './api/api'
 import { useToast } from 'vue-toastification'
@@ -97,34 +101,29 @@ import { useToast } from 'vue-toastification'
 //Notifications
 const toast = useToast()
 
-export default {
-  setup() {
-    const user = useLoggedInUserStore();
-    return { user };
-  },
-  data() {
-    return {
-      orgName: "Dataplatform",
-    };
-  },
-  async created() {
-    try {
-      this.orgName = await getOrgName();
-    } catch {
-      throw (error)
-    }
-  },
-  methods: {
-    logout() {
-      try {
-        this.$store.dispatch('clearSessionData');
-        this.$router.push('/')
-      } catch (error) {
-        toast.error('logout error', error)
-      }
-    },
+// MIGRATION NOTE: the Pinia store used to be returned from setup(); now it is a plain
+// top-level const. The template still calls user.logout and reads user.role / user.isLoggedIn.
+const user = useLoggedInUserStore()
+
+// MIGRATION NOTE: the data option (orgName) became a ref. Read/write it with orgName.value in script;
+// the template unwraps it automatically, so {{ orgName }} did not change.
+const orgName = ref('Dataplatform')
+
+// MIGRATION NOTE: the async created hook became onMounted().
+// The old catch block did `throw (error)` with no `error` variable declared, which caused a
+// ReferenceError. Now the error is caught, logged, and the default org name stays on screen.
+onMounted(async () => {
+  try {
+    orgName.value = await getOrgName()
+  } catch (error) {
+    console.error('Unable to load organization name:', error)
+    toast.error('Unable to load organization name')
   }
-}
+})
+
+// MIGRATION NOTE: the old logout() method was removed on purpose. It called
+// this.$store.dispatch('clearSessionData'), which is Vuex, but this project uses Pinia.
+// It was never called (the nav uses user.logout from the Pinia store), so it was dead code.
 </script>
 
 <style scoped>

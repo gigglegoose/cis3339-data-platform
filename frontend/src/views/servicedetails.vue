@@ -76,7 +76,7 @@
           </div>
           <!--Go back button-->
           <div class="flex justify-between mt-20 mr-20">
-            <button type="reset" class="border border-red-700 bg-white text-red-700 rounded" @click="this.$router.back()">
+            <button type="reset" class="border border-red-700 bg-white text-red-700 rounded" @click="router.back()">
               Go back
             </button>
           </div>
@@ -101,7 +101,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-300">
-            <tr @click="$router.push({name: 'eventdetails', params: { id: event._id } })" 
+            <tr @click="router.push({name: 'eventdetails', params: { id: event._id } })" 
             v-for="event in events" :key="event._id" class="cursor-pointer"
               :class="{ 'hoverRow': hoverId === event._id }" @mouseenter="hoverId = event._id"
               @mouseleave="hoverId = null">
@@ -116,104 +116,110 @@
   </main>
 </template>
 
-<script>
+<script setup>
+// MIGRATION NOTE: Converted from the Options API (data, setup, validations, mounted, methods) to <script setup>.
+import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import useVuelidate from '@vuelidate/core'
 import { required } from '@vuelidate/validators'
-import { useLoggedInUserStore } from "../store/loggedInUser";
+import { useLoggedInUserStore } from '../store/loggedInUser'
 import { getServiceById, getEventsByServiceId, updateService, deleteService } from '../api/api'
 import { useToast } from 'vue-toastification'
 
 //Notifications
 const toast = useToast()
 
-export default {
-  data() {
-    return {
-      //variable to store service information
-      service: {
-        name: null,
-        description: null,
-        status: null
-      },
-      // all events that host the service
-      events: [],
-      // variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
-      hoverId: null,
-    }
-  },
-  setup() {
-    // register Vuelidate and loggedIn store
-    const v$ = useVuelidate();
-    const user = useLoggedInUserStore();
-    return { v$, user };
-  },
-  validations() {
-    // validations      
-    return {
-      service: {
-        name: { required },
-      },
-    };
-  },
-  async mounted() {
-    // when component is mounted, data is loaded
-    try {
-      const [serviceResponse, eventsResponse] = await Promise.all([
-        getServiceById(this.$route.params.id),
-        getEventsByServiceId(this.$route.params.id),
-      ]);
+// MIGRATION NOTE: this.$route became useRoute() (to read the :id param)
+// and this.$router became useRouter() (to navigate)
+const route = useRoute()
+const router = useRouter()
 
-      this.service = serviceResponse;
-      this.events = eventsResponse;
+// MIGRATION NOTE: the logged-in store used to be returned from setup(); now it is a top-level const
+const user = useLoggedInUserStore()
 
-    } catch (error) {
-      toast.error(error);
-    }
-  },
-  methods: {
-    // method to format the event dates
-    formatDate(date) {
-      const isoDate = new Date(date);
-      const year = isoDate.getUTCFullYear();
-      const month = String(isoDate.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(isoDate.getUTCDate()).padStart(2, '0');
-      return `${month}/${day}/${year}`;
-    },
+// MIGRATION NOTE: the data option properties became refs
+//variable to store service information
+const service = ref({
+  name: null,
+  description: null,
+  status: null
+})
+// all events that host the service
+const events = ref([])
+// variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
+const hoverId = ref(null)
 
-    // method called when user attempts to update the service
-    async submitServiceUpdate() {
-      // Trigger validation
-      this.v$.$validate();
-
-      if (this.v$.$error) {
-        // Form is invalid, do not proceed
-        return;
-      }
-
-      try {
-        const response = await updateService(this.$route.params.id, this.service);
-        this.$router.push('/findservice')
-        toast.success(response)
-      } catch (error) {
-        toast.error('error updating service', error)
-      }
-    },
-
-    // method to make the API call to delete the service - can only be deleted service is not used in any event
-    async submitDeleteService() {
-      try {
-        if (this.events.length != 0)
-        {
-          toast.info('Service can not be deleted since it is being used by events.')
-          return
-        }
-        const response = await deleteService(this.$route.params.id);
-        toast.success(response)
-        this.$router.push('/findservice')
-      } catch (error) {
-        toast.error(error)
-      }
-    },
+// MIGRATION NOTE: validations() became a plain rules object
+const rules = {
+  service: {
+    name: { required }
   }
 }
+
+// MIGRATION NOTE: useVuelidate now gets the rules and state explicitly. Because `service` is a ref,
+// Vuelidate keeps validating the new object after onMounted replaces service.value.
+const v$ = useVuelidate(rules, { service })
+
+// MIGRATION NOTE: methods.formatDate became a regular function
+// function to format the event dates
+function formatDate(date) {
+  const isoDate = new Date(date)
+  const year = isoDate.getUTCFullYear()
+  const month = String(isoDate.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(isoDate.getUTCDate()).padStart(2, '0')
+  return `${month}/${day}/${year}`
+}
+
+// MIGRATION NOTE: methods.submitServiceUpdate became a regular function
+// this.$route.params.id became route.params.id
+// function called when user attempts to update the service
+async function submitServiceUpdate() {
+  // Trigger validation
+  await v$.value.$validate()
+
+  if (v$.value.$error) {
+    // Form is invalid, do not proceed
+    return
+  }
+
+  try {
+    const response = await updateService(route.params.id, service.value)
+    router.push('/findservice')
+    toast.success(response)
+  } catch (error) {
+    toast.error('error updating service', error)
+  }
+}
+
+// MIGRATION NOTE: methods.submitDeleteService became a regular function
+// function to make the API call to delete the service - can only be deleted if service is not used in any event
+async function submitDeleteService() {
+  try {
+    if (events.value.length !== 0) {
+      toast.info('Service can not be deleted since it is being used by events.')
+      return
+    }
+    const response = await deleteService(route.params.id)
+    toast.success(response)
+    router.push('/findservice')
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+// MIGRATION NOTE: async mounted() became onMounted()
+// when component is mounted, load the service and the events that use it
+onMounted(async () => {
+  try {
+    const [serviceResponse, eventsResponse] = await Promise.all([
+      getServiceById(route.params.id),
+      getEventsByServiceId(route.params.id)
+    ])
+
+    service.value = serviceResponse
+    events.value = eventsResponse
+  } catch (error) {
+    toast.error(error)
+  }
+})
 </script>

@@ -171,7 +171,7 @@
         </div>
         <!--Go back button-->
         <div class="flex justify-between mt-10 mr-20">
-          <button type="reset" class="border border-red-700 bg-white text-red-700 rounded" @click=this.$router.back()>
+          <button type="reset" class="border border-red-700 bg-white text-red-700 rounded" @click="router.back()">
             Go back
           </button>
         </div>
@@ -196,7 +196,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-300">
-            <tr @click="$router.push({ name: 'eventdetails', params: { id: event._id } })" 
+            <tr @click="router.push({ name: 'eventdetails', params: { id: event._id } })" 
             v-for="event in clientEvents" :key="event._id" class="cursor-pointer" 
               :class="{ 'hoverRow': hoverId === event._id }" @mouseenter="hoverId = event._id" @mouseleave="hoverId = null">
               <td class="p-2 text-left">{{ event.name }}</td>
@@ -231,190 +231,190 @@
   </main>
 </template>
 
-<script>
+<script setup>
+// MIGRATION NOTE: Converted from a mixed Options API file (components, setup, data, validations,
+// mounted, methods) to <script setup>.
+import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import useVuelidate from '@vuelidate/core'
 import { required, email, numeric, minLength, maxLength } from '@vuelidate/validators'
+// MIGRATION NOTE: the `components: { VueMultiselect }` option is gone. In <script setup>,
+// importing the component is enough for <VueMultiselect> to work in the template.
 import VueMultiselect from 'vue-multiselect'
-import { useLoggedInUserStore } from "../store/loggedInUser";
+import { useLoggedInUserStore } from '../store/loggedInUser'
 import { getClientById, getClientEvents, getNonClientEvents, registerAttendee, deregisterAttendee, updateClient, deleteClientbyId } from '../api/api'
 import { useToast } from 'vue-toastification'
 
 //Notifications
 const toast = useToast()
 
-export default {
-  // register components
-  components: {
-    VueMultiselect,
+// MIGRATION NOTE: this.$route became useRoute() and this.$router became useRouter()
+const route = useRoute()
+const router = useRouter()
+
+// MIGRATION NOTE: the logged-in store used to be returned from setup(); now it is a top-level const
+const user = useLoggedInUserStore()
+
+// MIGRATION NOTE: the data option properties became refs
+// events that the client is not registered in - to be shown in the multiselect
+const eventsFiltered = ref([])
+// events that user selects from multiselect list
+const eventsSelected = ref([])
+//variable to hold the events that the selected client is associated with
+const clientEvents = ref([])
+//variable to hold client information
+const client = ref({
+  firstName: null,
+  middleName: null,
+  lastName: null,
+  email: null,
+  phoneNumber: {
+    primary: null,
+    alternate: null
   },
-  setup() {
-    // register Vuelidate and loggedIn store
-    const v$ = useVuelidate();
-    const user = useLoggedInUserStore();
-    return { v$, user };
-  },
-  data() {
-    return {
-      // events that the client is not registered in - to be shown in the multiselect
-      eventsFiltered: [],
-      // events that user selects from multiselect list
-      eventsSelected: [],
-      //variable to hold the events that the selected client is associated with
-      clientEvents: [],
-      //variable to hold client information  
-      client: {
-        firstName: null,
-        middleName: null,
-        lastName: null,
-        email: null,
-        phoneNumber: {
-          primary: null,
-          alternate: null
-        },
-        address: {
-          line1: null,
-          line2: null,
-          city: null,
-          county: null,
-          zip: null
-        }
-      },
-      // variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
-      hoverId: null
+  address: {
+    line1: null,
+    line2: null,
+    city: null,
+    county: null,
+    zip: null
+  }
+})
+// variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
+const hoverId = ref(null)
+
+// MIGRATION NOTE: validations() became a plain rules object with the same `client` key
+const rules = {
+  client: {
+    firstName: { required },
+    lastName: { required },
+    email: { required, email },
+    phoneNumber: {
+      primary: {
+        required,
+        numeric,
+        minLength: minLength(10),
+        maxLength: maxLength(10)
+      }
+    },
+    address: {
+      city: { required }
     }
-  },
-  validations() {
-    // validations
-    return {
-      client: {
-        firstName: { required },
-        lastName: { required },
-        email: { required, email },
-        phoneNumber: {
-          primary: {
-            required,
-            numeric,
-            minLength: minLength(10),
-            maxLength: maxLength(10),
-          },
-        },
-        address: {
-          city: { required },
-        },
-      },
-    };
-  },
-  async mounted() {
-    // when component is mounted, data is loaded
-    // get client information, events the client is registered in, and events that client is not registered in
-    try {
-      const [clientResponse, clientEventsResponse, nonClientEventsResponse] = await Promise.all([
-        getClientById(this.$route.params.id),
-        getClientEvents(this.$route.params.id),
-        getNonClientEvents(this.$route.params.id),
-      ]);
-
-      this.client = clientResponse;
-      this.clientEvents = clientEventsResponse;
-      this.eventsFiltered = nonClientEventsResponse;
-
-    } catch (error) {
-      toast.error('error loading data:', error)
-    }
-  },
-  methods: {
-    // method called to format the event date
-    formatDate(date) {
-      const isoDate = new Date(date);
-      const year = isoDate.getUTCFullYear();
-      const month = String(isoDate.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(isoDate.getUTCDate()).padStart(2, '0');
-      return `${month}/${day}/${year}`;
-    },
-    //custom label for multiselect
-    nameWithDate({ name, date }) {
-      return `${name} (${this.formatDate(date)})`
-    },
-
-    // method called to remove client from event
-    async removeClientFromEvent(clientId, eventId) {
-      // remove client ID from the "attendees" array for that event
-      try {
-        const response = await deregisterAttendee(eventId, clientId);
-        toast.success(response)
-      } catch (error) {
-        toast.error(error);
-      }
-      // update events for which client is registered, and events for which client is not registered
-      try {
-        this.clientEvents = await getClientEvents(this.$route.params.id);
-        this.eventsFiltered = await getNonClientEvents(this.$route.params.id);
-      } catch (error) {
-        toast.error(error);
-      }
-    },
-
-    // method called to add client to an event
-    async addClientToEvent() {
-      try {
-        const client = this.client._id;
-        const events = this.eventsSelected.map((event) => event._id);
-        const promises = [];
-
-        for (const eventId of events) {
-          promises.push(registerAttendee(eventId, client));
-        }
-
-        Promise.all(promises)
-          .then(async () => {
-            try {
-              this.clientEvents = await getClientEvents(this.$route.params.id);
-              this.eventsFiltered = await getNonClientEvents(this.$route.params.id);
-              this.eventsSelected = [];
-            } catch (error) {
-              toast.error(error);
-            }
-          })
-          .catch((error) => {
-            toast.error(error);
-          });
-      } catch (error) {
-        toast.error(error);
-      }
-
-    },
-
-    // update client information
-    async submitUpdateClient() {
-      // Trigger validation
-      this.v$.$validate();
-
-      if (this.v$.$error) {
-        // Form is invalid, do not proceed
-        return;
-      }
-
-      try {
-        const response = await updateClient(this.$route.params.id, this.client);
-        this.$router.push('/findclient')
-        toast.success(response)
-      } catch (error) {
-        toast.error(error)
-      }
-    },
-
-    // method called when user attempts to delete client
-    async submitDeleteClient() {
-      try {
-        const response = await deleteClientbyId(this.$route.params.id);
-        toast.success(response)
-        this.$router.push('/findclient')
-      } catch (error) {
-        toast.error(error);
-      }
-    },
   }
 }
+
+// MIGRATION NOTE: useVuelidate now gets the rules and the state passed in explicitly
+const v$ = useVuelidate(rules, { client })
+
+// MIGRATION NOTE: methods.formatDate became a regular function
+// function called to format the event date
+function formatDate(date) {
+  const isoDate = new Date(date)
+  const year = isoDate.getUTCFullYear()
+  const month = String(isoDate.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(isoDate.getUTCDate()).padStart(2, '0')
+  return `${month}/${day}/${year}`
+}
+
+// MIGRATION NOTE: methods.nameWithDate became a regular function.
+// It used this.formatDate before; now it calls formatDate directly.
+//custom label for multiselect
+function nameWithDate({ name, date }) {
+  return `${name} (${formatDate(date)})`
+}
+
+// Reloads both event lists for this client.
+// The same two API calls were repeated in removeClientFromEvent and addClientToEvent before.
+async function refreshEventLists() {
+  clientEvents.value = await getClientEvents(route.params.id)
+  eventsFiltered.value = await getNonClientEvents(route.params.id)
+}
+
+// MIGRATION NOTE: methods.removeClientFromEvent became a regular function
+// function called to remove client from event
+async function removeClientFromEvent(clientId, eventId) {
+  // remove client ID from the "attendees" array for that event
+  try {
+    const response = await deregisterAttendee(eventId, clientId)
+    toast.success(response)
+  } catch (error) {
+    toast.error(error)
+  }
+  // update events for which client is registered, and events for which client is not registered
+  try {
+    await refreshEventLists()
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+// MIGRATION NOTE: methods.addClientToEvent became a regular function.
+// The old .then()/.catch() chain was rewritten with await so it reads top to bottom.
+// Same behavior: register the client for every selected event, then refresh both lists.
+// function called to add client to an event
+async function addClientToEvent() {
+  try {
+    const clientId = client.value._id
+    const eventIds = eventsSelected.value.map((event) => event._id)
+
+    await Promise.all(eventIds.map((eventId) => registerAttendee(eventId, clientId)))
+
+    await refreshEventLists()
+    eventsSelected.value = []
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+// MIGRATION NOTE: methods.submitUpdateClient became a regular function
+// update client information
+async function submitUpdateClient() {
+  // Trigger validation
+  await v$.value.$validate()
+
+  if (v$.value.$error) {
+    // Form is invalid, do not proceed
+    return
+  }
+
+  try {
+    const response = await updateClient(route.params.id, client.value)
+    router.push('/findclient')
+    toast.success(response)
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+// MIGRATION NOTE: methods.submitDeleteClient became a regular function
+// function called when user attempts to delete client
+async function submitDeleteClient() {
+  try {
+    const response = await deleteClientbyId(route.params.id)
+    toast.success(response)
+    router.push('/findclient')
+  } catch (error) {
+    toast.error(error)
+  }
+}
+
+// MIGRATION NOTE: async mounted() became onMounted()
+// when component is mounted, load the client, the events they are in, and the events they are not in
+onMounted(async () => {
+  try {
+    const [clientResponse, clientEventsResponse, nonClientEventsResponse] = await Promise.all([
+      getClientById(route.params.id),
+      getClientEvents(route.params.id),
+      getNonClientEvents(route.params.id)
+    ])
+
+    client.value = clientResponse
+    clientEvents.value = clientEventsResponse
+    eventsFiltered.value = nonClientEventsResponse
+  } catch (error) {
+    toast.error('error loading data:', error)
+  }
+})
 </script>
 
 <!--Style for multiselect-->
