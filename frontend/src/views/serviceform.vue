@@ -76,7 +76,10 @@
     </main>
 </template>
 
-<script>
+<script setup>
+// MIGRATION NOTE: Converted from the Options API (data, setup, validations, methods) to <script setup>.
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 // import vuelidate validations
 import useVuelidate from '@vuelidate/core'
 import { required } from '@vuelidate/validators'
@@ -86,49 +89,47 @@ import { useToast } from 'vue-toastification'
 //Notifications
 const toast = useToast()
 
-export default {
-    data() {
-        return {
-            //variable to hold new service information
-            service: {
-                name: null,
-                description: null,
-                status: "Active",
-            },
-        }
-    },
-    setup() {
-        // Register Vuelidate
-        const v$ = useVuelidate();
-        return { v$ };
-    },
-    validations() {
-        // validations for service
-        return {
-            service: {
-                name: { required },
-            }
-        }
-    },
-    methods: {
-        // method called when user attempts to create new service
-        async handleSubmitForm() {
-            // Trigger validation
-            this.v$.$validate();
+// MIGRATION NOTE: this.$router became useRouter()
+const router = useRouter()
 
-            if (this.v$.$error) {
-                // Form is invalid, do not proceed
-                return;
-            }
+// MIGRATION NOTE: the data option (service) became a ref.
+// variable to hold new service information
+const service = ref({
+  name: null,
+  description: null,
+  status: 'Active'
+})
 
-            try {
-                const response = await createService(this.service);
-                toast.success(response)
-                this.$router.push('/findservice')
-            } catch (error) {
-                toast.error('Error creating new service:', error)
-            }
-        },
-    }
+// MIGRATION NOTE: the validations() option became a plain rules object.
+// The rules keep the same `service` key so the template's v$.service.name.$error still works.
+const rules = {
+  service: {
+    name: { required }
+  }
+}
+
+// MIGRATION NOTE: with the Options API, useVuelidate() read rules and state from the component
+// automatically. Without the data and validations options, we must pass both in explicitly.
+const v$ = useVuelidate(rules, { service })
+
+// MIGRATION NOTE: methods.handleSubmitForm became a regular function.
+// `this.v$` became `v$.value`, and `this.service` became `service.value`.
+// method called when user attempts to create new service
+async function handleSubmitForm() {
+  // Trigger validation
+  await v$.value.$validate()
+
+  if (v$.value.$error) {
+    // Form is invalid, do not proceed
+    return
+  }
+
+  try {
+    const response = await createService(service.value)
+    toast.success(response)
+    router.push('/findservice')
+  } catch (error) {
+    toast.error('Error creating new service:', error)
+  }
 }
 </script>

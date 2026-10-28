@@ -31,22 +31,18 @@
     </div>
 </template>
 
-<script>
-  import { useLoggedInUserStore } from "../store/loggedInUser";
+<script setup>
+// MIGRATION NOTE: Converted from a mixed Options API file (a data option plus setup) to <script setup>.
+import { ref } from 'vue'
+import { useLoggedInUserStore } from '../store/loggedInUser'
 
-  export default {
-    data() {
-      return {
-        username: "",
-        password: "",
-      }
-    },
-    setup() {
-      const store = useLoggedInUserStore();
-      return {
-        store
-      }
-    }
-  }
+// MIGRATION NOTE: the store used to be returned from setup(). In <script setup> any top-level
+// const is available to the template, so @submit.prevent="store.login(...)" still works.
+const store = useLoggedInUserStore()
+
+// MIGRATION NOTE: the data option (username, password) became two refs.
+// v-model="username" and v-model="password" in the template did not need to change.
+const username = ref('')
+const password = ref('')
 </script>
 
