@@ -1,179 +1,58 @@
-<!-- This view displays a list of events. Users can search for events, and click on an event to be redirected to another component to view that event's details -->
 <template>
-  <main>
-    <div>
-      <!--Header-->
-      <h1 class="font-bold text-4xl text-red-700 tracking-widest text-center mt-10">
-        List of Events
-      </h1>
+  <main class="p-10">
+    <h1 class="font-bold text-4xl text-red-700 text-center mb-10">List of Events</h1>
+    <div class="flex gap-4 flex-wrap items-end mb-8">
+      <label>Search Event By
+        <select v-model="searchBy" class="block rounded border-gray-300">
+          <option value="Event Name">Event Name</option>
+          <option value="Event Date">Event Date</option>
+        </select>
+      </label>
+      <input v-if="searchBy === 'Event Name'" v-model="name" aria-label="Event name" placeholder="Event name" @keyup.enter="search" />
+      <input v-else type="date" v-model="eventDate" aria-label="Event date" />
+      <button class="border rounded p-2" @click="clear">Clear Search</button>
+      <button class="bg-red-700 text-white rounded p-2" @click="search">Search Event</button>
     </div>
-    <div class="px-10 pt-20">
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-10">
-        <h2 class="text-2xl font-bold">Search Event By</h2>
-        <!-- Displays Event Name or Event Date selection -->
-        <div class="flex flex-col">
-          <select
-            class="rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-            v-model="searchBy">
-            <option value="Event Name">Event Name</option>
-            <option value="Event Date">Event Date</option>
-          </select>
-        </div>
-        <!--Displays event name search field-->
-        <div class="flex flex-col" v-if="searchBy === 'Event Name'">
-          <label class="block">
-            <input type="text"
-              class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-              v-model="name" v-on:keyup.enter="handleSubmitForm" placeholder="Enter event name" />
-          </label>
-        </div>
-        <!-- Displays event date search field -->
-        <div class="flex flex-col" v-if="searchBy === 'Event Date'">
-          <input
-            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-            type="date" v-model="eventDate" v-on:keyup.enter="handleSubmitForm" />
-        </div>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-10">
-        <div></div>
-        <div></div>
-        <!--Clear Search button-->
-        <div class="mt-5 grid-cols-2">
-          <button class="mr-10 border border-red-700 bg-white text-red-700 rounded" @click="loadData" type="submit">
-            Clear Search
-          </button>
-          <!--Search Event button-->
-          <button class="bg-red-700 text-white rounded" @click="handleSubmitForm" type="submit">
-            Search Event
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <hr class="mt-10 mb-10" />
-    <!-- Display Found Data -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-10">
-      <!--Table showing List of Events-->
-      <div class="ml-10">
-        <h2 class="text-2xl font-bold">List of Events</h2>
-        <h3 class="italic">Click table row to view event details</h3>
-      </div>
-      <div class="flex flex-col col-span-2">
-        <table class="min-w-full shadow-md rounded">
-          <thead class="bg-gray-50 text-xl">
-            <tr>
-              <th class="p-4 text-left">Event Name</th>
-              <th class="p-4 text-left">Event Date</th>
-              <th class="p-4 text-left">Event Address</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-300">
-            <tr @click="router.push({name: 'eventdetails', params: { id: event._id } })"
-              v-for="event in events" :key="event._id" class="cursor-pointer"
-              :class="{ 'hoverRow': hoverId === event._id }" @mouseenter="hoverId = event._id"
-              @mouseleave="hoverId = null">
-              <td class="p-2 text-left">{{ event.name }}</td>
-              <td class="p-2 text-left">{{ formatDate(event.date) }}</td>
-              <td class="p-2 text-left">{{ event.address.line1 }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <h2 class="font-bold text-2xl">List of Events</h2>
+    <p class="italic mb-3">Click a row to view event details</p>
+    <p v-if="loading" role="status">Loading events...</p>
+    <div v-else-if="error" role="alert" class="text-red-800">{{ error }} <button class="underline" @click="execute">Retry</button></div>
+    <p v-else-if="!events?.length">No events found.</p>
+    <DataTable v-else :columns="columns" :rows="events" @select="row => router.push({ name: 'eventdetails', params: { id: row._id } })" />
   </main>
 </template>
-
 <script setup>
-// MIGRATION NOTE: Converted from the Options API (data, mounted, methods) to <script setup>.
+// F1/F2/F3: Migrated async list loading and filtering into one useApi composable and shared DataTable.
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getEvents, searchEvents } from '../api/api'
-import { useToast } from 'vue-toastification'
-
-//Notifications
-const toast = useToast()
-
-// MIGRATION NOTE: $router in the template now uses this router from useRouter()
+import { useApi } from '../composables/useApi'
+import DataTable from '../components/DataTable.vue'
+// MIGRATION NOTE: this.$router became useRouter(); the template now calls router.push(...)
 const router = useRouter()
-
-// MIGRATION NOTE: each property in the data option became its own ref
-//variable to hold all events for the organization
-const events = ref(null)
-// Parameters for search to occur
-const searchBy = ref(null)
-const name = ref(null)
-const eventDate = ref(null)
-// variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
-const hoverId = ref(null)
-
-// MIGRATION NOTE: methods.loadData became a regular function. this.x became x.value
-// The old version set this.isLoading = true, but isLoading was never declared in the data option and
-// never shown in the template, so that line did nothing and was removed.
-// function called when component is mounted and when "Clear Search" is clicked
-async function loadData() {
-  // Resets variables used for search
-  searchBy.value = null
-  name.value = null
-  eventDate.value = null
-
-  // get list of events
-  try {
-    const response = await getEvents()
-    events.value = response
-  } catch (error) {
-    toast.error('loadData error', error)
-  }
+// MIGRATION NOTE: each property in the old data option (searchBy, name, eventDate) became a ref
+const searchBy = ref('Event Name')
+const name = ref('')
+const eventDate = ref('')
+const query = ref(null)
+// MIGRATION NOTE: the hand-rolled events/try-catch/toast pattern became the shared useApi composable (F2)
+const { data: events, loading, error, execute } = useApi(() => query.value ? searchEvents(query.value) : getEvents())
+// MIGRATION NOTE: methods.formatDate became a plain function used by the Event Date column
+function formatDate(value) { if (!value) return ''; const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : `${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}/${d.getUTCFullYear()}` }
+// MIGRATION NOTE: the hand-written <table> markup was replaced by these DataTable column definitions (F3)
+const columns = [
+  { label: 'Event Name', field: 'name' },
+  { label: 'Event Date', field: 'date', render: r => formatDate(r.date) },
+  { label: 'Event Address', field: 'address.line1' }
+]
+// MIGRATION NOTE: methods.loadData became clear(). It resets the search fields and reloads through useApi
+function clear() { name.value = ''; eventDate.value = ''; query.value = null; execute() }
+// MIGRATION NOTE: methods.handleSubmitForm became search(). It builds the query and reruns the same useApi call
+function search() {
+  if (searchBy.value === 'Event Date' && !eventDate.value) return
+  query.value = searchBy.value === 'Event Name' ? { searchBy: 'name', name: name.value } : { searchBy: 'date', eventDate: eventDate.value }
+  execute()
 }
-
-// MIGRATION NOTE: methods.handleSubmitForm became a regular function
-// function called when user searches for an event
-async function handleSubmitForm() {
-  // if user searches by event name
-  if (searchBy.value === 'Event Name') {
-    if (name.value) {
-      try {
-        const query = {
-          searchBy: 'name',
-          name: name.value
-        }
-        const response = await searchEvents(query)
-        events.value = response
-      } catch (error) {
-        toast.error('Error searching events', error)
-      }
-    }
-    // if user searches by event date
-  } else if (searchBy.value === 'Event Date') {
-    if (eventDate.value) {
-      try {
-        const date = new Date(eventDate.value)
-        const formattedDate = date.toISOString().substring(0, 10)
-        const query = {
-          searchBy: 'date',
-          eventDate: formattedDate
-        }
-        const response = await searchEvents(query)
-        events.value = response
-      } catch (error) {
-        toast.error('Error searching events:', error)
-      }
-    }
-  }
-}
-
-// MIGRATION NOTE: methods.formatDate became a regular function the template can call directly
-// function called for each event date so it will be formatted correctly on the table
-function formatDate(date) {
-  const isoDate = new Date(date)
-  const year = isoDate.getUTCFullYear()
-  const month = String(isoDate.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(isoDate.getUTCDate()).padStart(2, '0')
-  return `${month}/${day}/${year}`
-}
-
-// MIGRATION NOTE: mounted() became onMounted()
-// when component is mounted, load the data
-onMounted(() => {
-  loadData()
-})
+// MIGRATION NOTE: mounted() became onMounted(); execute() from useApi loads the list on page load
+onMounted(execute)
 </script>

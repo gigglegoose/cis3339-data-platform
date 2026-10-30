@@ -1,180 +1,63 @@
-<!-- This view displays a list of clients. The user can search for clients, and click on a client to redirect to another component to view that client's information -->
 <template>
-  <main>
-    <div>
-      <!--Header-->
-      <h1 class="font-bold text-4xl text-red-700 tracking-widest text-center mt-10">
-        Find Client
-      </h1>
+  <main class="p-10">
+    <h1 class="font-bold text-4xl text-red-700 text-center mb-10">Find Client</h1>
+    <div class="flex flex-wrap gap-4 items-end mb-8">
+      <label>Search Client By
+        <select v-model="searchBy" class="block rounded border-gray-300">
+          <option value="Client Name">Client Name</option>
+          <option value="Client Number">Client Number</option>
+        </select>
+      </label>
+      <template v-if="searchBy === 'Client Name'">
+        <input v-model="firstName" aria-label="First name" placeholder="First name" @keyup.enter="search" />
+        <input v-model="lastName" aria-label="Last name" placeholder="Last name" @keyup.enter="search" />
+      </template>
+      <input v-else v-model="phoneNumber" aria-label="Phone number" placeholder="Phone number" @keyup.enter="search" />
+      <button class="border rounded p-2" @click="clear">Clear Search</button>
+      <button class="bg-red-700 text-white rounded p-2" @click="search">Search Client</button>
     </div>
-    <div class="px-10 pt-20">
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-10">
-        <!--Search Client By selection-->
-        <h2 class="text-2xl font-bold">Search Client By</h2>
-        <!-- Displays Client Name search field -->
-        <div class="flex flex-col">
-          <select
-            class="rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-            v-model="searchBy">
-            <option value="Client Name">Client Name</option>
-            <option value="Client Number">Client Number</option>
-          </select>
-        </div>
-        <!--Input box for searching by Client First Name-->
-        <div class="flex flex-col" v-if="searchBy === 'Client Name'">
-          <label class="block">
-            <input type="text"
-              class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-              v-model="firstName" v-on:keyup.enter="handleSubmitForm" placeholder="Enter first name" />
-          </label>
-        </div>
-        <!--Input box for searching by Client Last Name-->
-        <div class="flex flex-col" v-if="searchBy === 'Client Name'">
-          <label class="block">
-            <input type="text"
-              class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-              v-model="lastName" v-on:keyup.enter="handleSubmitForm" placeholder="Enter last name" />
-          </label>
-        </div>
-        <!-- Displays Client Number search field -->
-        <div class="flex flex-col" v-if="searchBy === 'Client Number'">
-          <input
-            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-            type="text" v-model="phoneNumber" v-on:keyup.enter="handleSubmitForm"
-            placeholder="Enter Client Phone Number" />
-        </div>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-10">
-        <div></div>
-        <div></div>
-        <!--Clear Search button-->
-        <div class="mt-5 grid-cols-2">
-          <button class="mr-10 border border-red-700 bg-white text-red-700 rounded" @click="loadData" type="submit">
-            Clear Search
-          </button>
-          <!--Search Client button-->
-          <button class="bg-red-700 text-white rounded" @click="handleSubmitForm" type="submit">
-            Search Client
-          </button>
-        </div>
-      </div>
+    <h2 class="text-2xl font-bold">List of Clients</h2>
+    <p class="italic mb-3">Click a row to view client details</p>
+    <p v-if="loading" role="status">Loading clients...</p>
+    <div v-else-if="error" role="alert" class="text-red-800">
+      {{ error }} <button class="underline ml-2" @click="execute">Retry</button>
     </div>
-
-    <hr class="mt-10 mb-10" />
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-10">
-      <div class="ml-10">
-        <h2 class="text-2xl font-bold">List of Clients</h2>
-        <h3 class="italic">Click table row to view client details</h3>
-      </div>
-      <!--Table showing list of Clients-->
-      <div class="flex flex-col col-span-2">
-        <table class="min-w-full shadow-md rounded">
-          <thead class="bg-gray-50 text-xl">
-            <tr>
-              <th class="p-4 text-left">Name</th>
-              <th class="p-4 text-left">Phone number</th>
-              <th class="p-4 text-left">City</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-300">
-            <tr @click="router.push({ name: 'clientdetails', params: { id: client._id } })" v-for="client in clients"
-              :key="client._id" class="cursor-pointer" :class="{ 'hoverRow': hoverId === client._id }"
-              @mouseenter="hoverId = client._id" @mouseleave="hoverId = null">
-              <td class="p-2 text-left">
-                {{ client.firstName + ' ' + client.lastName }}
-              </td>
-              <td class="p-2 text-left">
-                {{ client.phoneNumber.primary }}
-              </td>
-              <td class="p-2 text-left">{{ client.address.city }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <p v-else-if="!clients?.length">No clients found.</p>
+    <DataTable v-else :columns="columns" :rows="clients" @select="row => router.push({ name: 'clientdetails', params: { id: row._id } })" />
   </main>
 </template>
-
 <script setup>
-// MIGRATION NOTE: Converted from the Options API (data, mounted, methods) to <script setup>.
+// F1/F2/F3: Composition API refs plus shared async-state and data table replace old Options API methods.
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getClients, searchClients } from '../api/api'
-import { useToast } from 'vue-toastification'
-
-//Notifications
-const toast = useToast()
-
-// MIGRATION NOTE: $router in the template now uses this router from useRouter()
+import { useApi } from '../composables/useApi'
+import DataTable from '../components/DataTable.vue'
+// MIGRATION NOTE: this.$router became useRouter(); the template now calls router.push(...)
 const router = useRouter()
-
-// MIGRATION NOTE: each property in the data option became its own ref
-//variable to store all clients and their information for the organization
-const clients = ref(null)
-// Parameters for search to occur
-const searchBy = ref('')
+// MIGRATION NOTE: each property in the old data option (searchBy, firstName, lastName, phoneNumber) became a ref
+const searchBy = ref('Client Name')
 const firstName = ref('')
 const lastName = ref('')
 const phoneNumber = ref('')
-// variable stores the ID of the row that the mouse is currently hovering over (to highlight the row red)
-const hoverId = ref(null)
-
-// MIGRATION NOTE: methods.loadData became a regular function. this.x became x.value
-// function called when component is mounted and when "Clear Search" is clicked
-async function loadData() {
-  // Resets all the variables
-  searchBy.value = ''
-  firstName.value = ''
-  lastName.value = ''
-  phoneNumber.value = ''
-
-  // get list of clients
-  try {
-    const response = await getClients()
-    clients.value = response
-  } catch (error) {
-    toast.error(error)
-  }
+const query = ref(null)
+// MIGRATION NOTE: the hand-rolled clients/try-catch/toast pattern became the shared useApi composable (F2)
+const { data: clients, loading, error, execute } = useApi(() => query.value ? searchClients(query.value) : getClients())
+// MIGRATION NOTE: the hand-written <table> markup was replaced by these DataTable column definitions (F3)
+const columns = [
+  { label: 'Name', field: 'firstName', render: r => `${r.firstName || ''} ${r.lastName || ''}`.trim() },
+  { label: 'Phone number', field: 'phoneNumber.primary' },
+  { label: 'City', field: 'address.city' }
+]
+// MIGRATION NOTE: methods.loadData became clear(). It resets the search fields and reloads through useApi
+function clear() { firstName.value = ''; lastName.value = ''; phoneNumber.value = ''; query.value = null; execute() }
+// MIGRATION NOTE: methods.handleSubmitForm became search(). It builds the query and reruns the same useApi call
+function search() {
+  query.value = searchBy.value === 'Client Name'
+    ? { searchBy: 'name', firstName: firstName.value, lastName: lastName.value }
+    : { searchBy: 'number', phoneNumber: phoneNumber.value }
+  execute()
 }
-
-// MIGRATION NOTE: methods.handleSubmitForm became a regular function
-// function called when user searches for clients
-async function handleSubmitForm() {
-  // if user searched by client name
-  if (searchBy.value === 'Client Name') {
-    if (firstName.value || lastName.value) {
-      try {
-        const query = {
-          searchBy: 'name',
-          firstName: firstName.value,
-          lastName: lastName.value
-        }
-        const response = await searchClients(query)
-        clients.value = response
-      } catch (error) {
-        toast.error(error)
-      }
-    }
-    // if user searches by client phone number
-  } else if (searchBy.value === 'Client Number') {
-    if (phoneNumber.value) {
-      try {
-        const query = {
-          searchBy: 'number',
-          phoneNumber: phoneNumber.value
-        }
-        const response = await searchClients(query)
-        clients.value = response
-      } catch (error) {
-        toast.error(error)
-      }
-    }
-  }
-}
-
-// MIGRATION NOTE: mounted() became onMounted()
-// when component is mounted, load the data
-onMounted(() => {
-  loadData()
-})
+// MIGRATION NOTE: mounted() became onMounted(); execute() from useApi loads the list on page load
+onMounted(execute)
 </script>
